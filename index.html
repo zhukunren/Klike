@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101b23" />
+    <title>形态镜像 · K线形态识别</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark"><span></span><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">形态镜像</div>
+            <div class="brand-subtitle">PATTERN MIRROR</div>
+          </div>
+        </div>
+
+        <div class="sidebar-label">研究工作台</div>
+        <nav class="main-nav" aria-label="主导航">
+          <button class="nav-item active" type="button" data-view="search"><span class="nav-icon">⌁</span><span>形态搜索</span><span class="nav-state"></span></button>
+          <button class="nav-item" type="button" data-view="scan"><span class="nav-icon">◫</span><span>市场扫描</span><span class="nav-state"></span></button>
+          <button class="nav-item" type="button" data-view="watchlist"><span class="nav-icon">☆</span><span>观察列表</span><span class="nav-state"></span><span class="nav-count" id="watchlist-count">0</span></button>
+          <button class="nav-item nav-action-item" id="sidebar-data-update" type="button"><span class="nav-icon">↻</span><span>更新行情</span><span class="nav-state"></span></button>
+        </nav>
+
+        <div class="sidebar-label market-label">市场范围</div>
+        <div class="market-nav">
+          <button class="market-nav-item active" type="button" data-market="all"><span class="market-dot all-dot"></span>全市场<span class="nav-count" id="count-all">—</span></button>
+          <button class="market-nav-item" type="button" data-market="主板"><span class="market-dot board-dot"></span>主板<span class="nav-count" id="count-board">—</span></button>
+          <button class="market-nav-item" type="button" data-market="成长"><span class="market-dot growth-dot"></span>成长<span class="nav-count" id="count-growth">—</span></button>
+          <button class="market-nav-item" type="button" data-market="北交所"><span class="market-dot bj-dot"></span>北交所<span class="nav-count" id="count-bj">—</span></button>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="data-status"><span class="status-pulse"></span><span>本地行情已连接</span></div>
+          <div class="data-meta">DAILY · OHLCV</div>
+          <div class="data-meta" id="footer-date">数据日期 —</div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>研究工作台</span><span class="crumb-divider">/</span><strong>形态搜索</strong></div>
+          <div class="topbar-actions">
+            <div class="market-live"><span class="live-dot"></span><span>行情在线</span></div>
+            <button class="data-update-trigger" id="data-update-trigger" type="button"><span>↻</span><span>更新行情</span></button>
+            <button class="icon-button" type="button" aria-label="设置" title="设置">⚙</button>
+            <div class="avatar" aria-label="用户">研</div>
+          </div>
+        </header>
+
+        <div id="search-view" class="app-view active">
+        <section class="page-heading">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span>SHAPE SEARCH / 01</div>
+            <h1>画一段走势，找到相似的 K 线</h1>
+            <p>用手绘的价格路径检索历史行情，快速观察相似结构之后的市场表现。</p>
+          </div>
+          <div class="heading-note"><span class="note-key">数据集</span><span class="note-value">A 股日线 · <span id="heading-date">—</span></span><span class="data-freshness" id="data-freshness"></span></div>
+        </section>
+
+        <section class="data-update-panel" id="data-update-panel" hidden>
+          <div class="data-update-head"><div><div class="panel-kicker">DATA PIPELINE</div><h2>更新本地行情</h2><p>通过交易日历逐日拉取全市场日线，更新完成后服务会自动重载。</p></div><button class="icon-button subtle" id="data-update-close" type="button" aria-label="关闭更新面板" title="关闭更新面板">×</button></div>
+          <div class="data-update-controls"><label>开始日期<input id="update-start-date" type="date" /></label><label>结束日期<input id="update-end-date" type="date" /></label><button class="primary-button compact-button" id="data-update-run" type="button"><span class="button-icon">↻</span><span>开始更新</span></button></div>
+          <div class="data-update-status" id="data-update-status"><span class="update-status-dot" id="update-status-dot"></span><strong id="update-status-text">准备就绪</strong><span id="update-status-detail">默认从本地最新日期开始</span></div>
+          <pre class="data-update-log" id="data-update-log">等待更新任务…</pre>
+        </section>
+
+        <section class="workspace-grid">
+          <section class="panel sketch-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">STEP 01</div>
+                <h2>输入形态</h2>
+              </div>
+              <div class="panel-actions">
+                <button class="text-button" id="load-example" type="button">载入示例</button>
+                <button class="icon-button subtle" id="clear-drawing" type="button" aria-label="清空曲线" title="清空曲线">×</button>
+              </div>
+            </div>
+            <div class="sketch-tabs" role="tablist" aria-label="输入方式">
+              <button class="sketch-tab active" id="draw-tab" type="button" role="tab" aria-selected="true">手绘曲线</button>
+              <button class="sketch-tab" id="upload-tab" type="button" role="tab" aria-selected="false">上传截图</button>
+            </div>
+            <div class="search-mode-block">
+              <div class="option-label">搜索模式</div>
+              <div class="mode-segmented" id="search-mode-control">
+                <button type="button" data-mode="current" class="active">当前候选</button>
+                <button type="button" data-mode="recent">近期形态</button>
+                <button type="button" data-mode="history">历史研究</button>
+              </div>
+            </div>
+            <div class="recent-options" id="recent-options" hidden>
+              <span class="option-label">近期范围</span>
+              <div class="segmented-control">
+                <button type="button" data-recent-days="5">5 日</button>
+                <button type="button" data-recent-days="20" class="active">20 日</button>
+                <button type="button" data-recent-days="60">60 日</button>
+              </div>
+            </div>
+            <div class="canvas-wrap sketch-wrap">
+              <canvas id="sketch-canvas" aria-label="手绘价格曲线画布"></canvas>
+              <div class="canvas-hint" id="canvas-hint"><span class="hint-pencil">✎</span> 在这里画出你的走势</div>
+              <div class="axis-label axis-top">高</div>
+              <div class="axis-label axis-bottom">低</div>
+              <div class="canvas-scale"><span>起点</span><span>形态区间</span><span>终点</span></div>
+            </div>
+            <div class="upload-tools" id="upload-tools" hidden>
+              <div class="upload-file-state"><strong id="upload-file-name">尚未选择图片</strong><span id="upload-file-status">支持 PNG / JPG / WEBP，图片只在本地处理</span></div>
+              <div class="upload-tool-actions"><button class="text-button" id="choose-upload" type="button">↑ 选择图片</button><button class="text-button muted" id="extract-upload" type="button" disabled>重新提取</button></div>
+              <div class="upload-detection" id="upload-detection" hidden><span>识别 K 线</span><div class="candle-stepper"><button class="icon-button subtle" id="candle-minus" type="button" aria-label="减少 K 线数量" title="减少 K 线数量">−</button><strong id="candle-count-value">—</strong><button class="icon-button subtle" id="candle-plus" type="button" aria-label="增加 K 线数量" title="增加 K 线数量">+</button></div><span class="detection-confidence" id="candle-confidence">—</span></div>
+            </div>
+            <input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <div class="input-options">
+              <div class="option-label">匹配窗口</div>
+              <div class="segmented-control" id="lookback-control">
+                <button type="button" data-lookback="20">20 日</button>
+                <button type="button" data-lookback="40" class="active">40 日</button>
+                <button type="button" data-lookback="60">60 日</button>
+                <button type="button" id="screenshot-window-option" data-lookback="screenshot" hidden>截图 · <span id="screenshot-window-label">—</span></button>
+              </div>
+            </div>
+            <div class="input-footnote"><span class="tiny-check">✓</span> 自动忽略价格绝对幅度，只比较走势结构</div>
+            <button class="primary-button" id="search-button" type="button"><span class="button-icon">⌁</span><span>搜索相似形态</span><span class="button-arrow">→</span></button>
+          </section>
+
+          <section class="panel result-panel">
+            <div class="panel-header result-header">
+              <div>
+                <div class="panel-kicker">STEP 02 · MATCHED PATTERN</div>
+                <h2>相似形态</h2>
+              </div>
+              <div class="result-toolbar">
+                <span class="match-count" id="match-count">正在载入…</span>
+                <button class="icon-button subtle" id="refresh-button" type="button" aria-label="重新搜索" title="重新搜索">↻</button>
+              </div>
+            </div>
+            <div class="selected-symbol-line">
+              <div class="selected-symbol"><span class="chart-status"></span><strong id="selected-code">—</strong><span id="selected-exchange">—</span></div>
+              <div class="selected-range" id="selected-range">—</div>
+            </div>
+            <div class="main-chart-wrap">
+              <canvas id="main-chart" aria-label="匹配结果 K 线图"></canvas>
+              <div class="chart-legend"><span><i class="legend-candle up"></i>上涨</span><span><i class="legend-candle down"></i>下跌</span><span><i class="legend-line"></i>匹配区间</span></div>
+              <div class="chart-tooltip" id="chart-tooltip"></div>
+            </div>
+            <div class="chart-footer"><span id="chart-footer-left">—</span><span id="chart-footer-right">点击下方结果查看其它相似区间</span></div>
+          </section>
+
+          <aside class="panel insight-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">STEP 03 · INSIGHT</div>
+                <h2>匹配洞察</h2>
+              </div>
+              <span class="insight-spark">↗</span>
+            </div>
+            <div class="score-block">
+              <div class="score-ring" id="score-ring"><div class="score-ring-inner"><strong id="score-value">—</strong><span>相似度</span></div></div>
+              <div class="score-copy"><strong id="score-title">等待扫描</strong><p id="score-subtitle">选择一个结果查看结构特征</p></div>
+            </div>
+            <div class="insight-divider"></div>
+            <div class="metric-list">
+              <div class="metric-row"><span id="forward-label">历史相似样本</span><strong id="forward-return">—</strong></div>
+              <div class="metric-row"><span>量能 / 前期均值</span><strong id="volume-ratio">—</strong></div>
+              <div class="metric-row"><span>当前收盘价</span><strong id="latest-price">—</strong></div>
+            </div>
+            <div class="insight-callout" id="insight-callout"><span class="callout-mark">i</span><p>正在从历史行情中寻找结构相近的路径。</p></div>
+            <div class="insight-footer"><span>扫描耗时</span><strong id="scan-time">—</strong></div>
+          </aside>
+        </section>
+
+        <section class="matches-section">
+          <div class="section-heading">
+            <div><div class="panel-kicker">RESULTS / RANKED BY SHAPE</div><h2>匹配结果</h2></div>
+            <div class="section-filters"><span class="filter-label">范围</span><button class="filter-chip active" data-market="all" type="button">全市场</button><button class="filter-chip" data-market="主板" type="button">主板</button><button class="filter-chip" data-market="成长" type="button">成长</button><span class="sort-label">相似度 ↓</span></div>
+          </div>
+          <div class="match-list" id="match-list"></div>
+        </section>
+
+        <footer class="app-footer"><span>形态镜像 / Pattern Mirror</span><span>本地运行 · 数据仅用于研究与回测</span></footer>
+        </div>
+
+        <section id="scan-view" class="app-view" hidden>
+          <div class="view-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span>MARKET SCAN / 02</div>
+              <h1>市场扫描</h1>
+              <p>把当前形态变成一张可执行的候选清单，按相似度、新鲜度和市场范围快速收敛。</p>
+            </div>
+            <div class="view-heading-actions"><span class="scan-data-note" id="scan-data-note">数据日期 —</span><button class="primary-button compact-button" id="scan-run-button" type="button"><span class="button-icon">↻</span><span>重新扫描</span></button></div>
+          </div>
+          <section class="scan-controls">
+            <div class="scan-control-group"><span class="control-label">市场范围</span><div class="filter-chip-row" id="scan-market-control"><button class="filter-chip active" data-scan-market="all" type="button">全市场</button><button class="filter-chip" data-scan-market="主板" type="button">主板</button><button class="filter-chip" data-scan-market="成长" type="button">成长</button><button class="filter-chip" data-scan-market="北交所" type="button">北交所</button></div></div>
+            <div class="scan-control-group"><span class="control-label">扫描模式</span><div class="mode-segmented compact-mode" id="scan-mode-control"><button class="active" data-scan-mode="current" type="button">当前候选</button><button data-scan-mode="recent" type="button">近期形态</button><button data-scan-mode="history" type="button">历史研究</button></div></div>
+            <div class="scan-control-group scan-select-group"><label class="control-label" for="scan-score-select">最低相似度</label><select id="scan-score-select"><option value="0">不限制</option><option value="90" selected>90 分</option><option value="93">93 分</option><option value="95">95 分</option></select></div>
+            <div class="scan-control-group scan-select-group"><label class="control-label" for="scan-phase-select">状态</label><select id="scan-phase-select"><option value="all">全部状态</option><option value="current">仅当前窗口</option><option value="trend">趋势偏强</option><option value="watch">观察回撤</option></select></div>
+          </section>
+          <div class="scan-summary-row"><div><strong id="scan-result-count">等待扫描</strong><span id="scan-result-caption">当前形态候选</span></div><div class="scan-summary-metrics"><span>候选池 <strong id="scan-pool-count">—</strong></span><span>当前窗口 <strong id="scan-current-count">—</strong></span><span>平均相似度 <strong id="scan-average-score">—</strong></span></div></div>
+          <section class="scan-table-wrap"><div class="scan-table-head"><span>候选标的</span><span>相似度</span><span>形态状态</span><span>距今</span><span>历史验证</span><span>操作</span></div><div id="scan-table-body" class="scan-table-body"></div></section>
+          <div class="scan-disclaimer"><span class="callout-mark">i</span><span>扫描结果用于生成研究候选，不代表买入建议；当前数据最新日期为 <strong id="scan-disclaimer-date">—</strong>。</span></div>
+        </section>
+
+        <section id="watchlist-view" class="app-view" hidden>
+          <div class="view-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-line"></span>WATCHLIST / 03</div>
+              <h1>观察列表</h1>
+              <p>把值得继续跟踪的形态留在这里，随行情刷新查看价格、趋势和匹配状态。</p>
+            </div>
+            <div class="view-heading-actions"><span class="scan-data-note" id="watchlist-data-note">数据日期 —</span><button class="icon-button subtle" id="watchlist-refresh" type="button" aria-label="刷新观察列表" title="刷新观察列表">↻</button></div>
+          </div>
+          <div class="watchlist-summary"><div class="watchlist-summary-title"><span class="status-pulse"></span><strong id="watchlist-summary-count">0 个标的</strong><span>本地保存 · 仅当前浏览器可见</span></div><div class="watchlist-summary-actions"><button class="text-button" id="watchlist-scan-button" type="button">用当前形态扫描</button><button class="text-button muted" id="watchlist-clear-button" type="button">清空列表</button></div></div>
+          <div id="watchlist-empty" class="watchlist-empty" hidden><div class="empty-symbol">☆</div><strong>还没有观察标的</strong><p>在形态搜索或市场扫描的结果中点击星标，将候选加入这里。</p><button class="primary-button compact-button" id="watchlist-empty-search" type="button"><span class="button-icon">⌁</span><span>开始形态搜索</span></button></div>
+          <section id="watchlist-grid" class="watchlist-grid"></section>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
