@@ -8,17 +8,20 @@
 
 ```powershell
 python -m pip install numpy pandas pyarrow tushare
+copy config.ini.example config.ini
 python server.py
 ```
+
+在 `config.ini` 的 `[credentials]` 中填写 `tushare_token` 和 `update_token`。该文件包含密钥，只保存在本机，不要提交到 Git。
 
 浏览器打开 <http://127.0.0.1:8765>。
 
 ## 更新行情
 
 行情更新脚本使用 TuShare 交易日历确定开放交易日，再按交易日调用全市场日线接口 `pro.daily(trade_date=...)`。它会增量合并到 `data/stock_daily.parquet`，重复日期按最新返回覆盖，不会依赖 MySQL。
+脚本按 20 个交易日一批拉取到临时分区，最后一次性合并并原子替换，适合多年历史数据；可通过 `--batch-size` 调整批大小。
 
 ```powershell
-$env:TUSHARE_TOKEN = "你的 TuShare Token"
 python tools/refresh_market_data.py
 ```
 
@@ -30,7 +33,7 @@ python tools/refresh_market_data.py --start-date 2026-09-14 --end-date 2026-09-2
 
 默认从本地 Parquet 的最新日期开始，包含该日期以允许修正最新数据；服务端会检测 Parquet 文件变化并自动重载行情索引和缓存。
 
-当本地还没有 `stock_daily.parquet` 时，网页更新面板要求填写开始日期，避免误拉取全历史；命令行首次初始化也建议显式指定 `--start-date` 和 `--end-date`。
+当本地还没有 `stock_daily.parquet` 时，网页更新面板和命令行都必须填写开始日期，避免误拉取全历史。公网部署时，网页更新令牌读取自 `config.ini` 的 `update_token`；未配置令牌时，反向代理请求会被拒绝，仅允许本机直连更新。
 
 ## 使用
 

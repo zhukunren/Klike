@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import math
 import mimetypes
@@ -9,7 +10,6 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,10 +18,17 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 import pyarrow.parquet as pq
 
+from config import CONFIG_PATH, ConfigError, load_credentials
+
 
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "data" / "stock_daily.parquet"
 CACHE_BARS = 320
+MAX_REQUEST_BODY = 256 * 1024
+
+
+class PayloadTooLargeError(ValueError):
+    pass
 
 
 def date_text(value) -> str:
@@ -55,6 +62,13 @@ def market_group(code: str) -> str:
 
 def rounded(value: float, digits: int = 4) -> float:
     return round(float(value), digits)
+
+
+def configured_update_token() -> str:
+    try:
+        return load_credentials().update_token
+    except ConfigError:
+        return ""
 
 
 def resample(values: np.ndarray, count: int) -> np.ndarray:
@@ -207,15 +221,17 @@ class MarketIndex:
             if self.cache_ready:
                 return
             started = time.perf_counter()
-            with ThreadPoolExecutor(max_workers=8) as executor:
-                self.parquet = pq.ParquetFile(self.path)
-                try:
-                    loaded = executor.map(self._load_one, self.metadata)
-                    for code, series in loaded:
-                        self.cache[code] = series
-                finally:
-                    self.parquet.close()
-                    self.parquet = None
+            # PyArrow ParquetFile is not safe to share across concurrent
+            # read_row_group calls. Load the small per-symbol tail
+            # sequentially to avoid native crashes on the first full scan.
+            self.parquet = pq.ParquetFile(self.path)
+            try:
+                for item in self.metadata:
+                    code, series = self._load_one(item)
+                    self.cache[code] = series
+            finally:
+                self.parquet.close()
+                self.parquet = None
             self.cache_ready = True
             elapsed = time.perf_counter() - started
             print(f"Loaded {len(self.cache)} symbols in {elapsed:.2f}s", flush=True)
@@ -556,8 +572,12 @@ def _run_update_process(command: list[str]) -> None:
 
 
 def start_update_job(start_date: str | None, end_date: str | None) -> dict:
-    if not (os.getenv("TUSHARE_TOKEN") or os.getenv("TS_TOKEN")):
-        raise RuntimeError("服务进程未配置 TUSHARE_TOKEN 或 TS_TOKEN")
+    try:
+        credentials = load_credentials()
+    except ConfigError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if not credentials.tushare_token:
+        raise RuntimeError("请在 config.ini [credentials] 中填写 tushare_token")
     if not DATA_PATH.exists() and not start_date:
         raise RuntimeError("本地暂无行情数据，请先填写开始日期")
     with UPDATE_LOCK:
@@ -599,7 +619,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def _send_file(self, path: Path) -> None:
-        if not path.exists() or not path.is_file() or ROOT not in path.resolve().parents:
+        resolved = path.resolve()
+        if resolved == CONFIG_PATH.resolve() or not path.exists() or not path.is_file() or ROOT not in resolved.parents:
             self._send_json({"error": "Not found"}, 404)
             return
         content = path.read_bytes()
@@ -610,10 +631,36 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("无效的 Content-Length") from exc
+        if length < 0:
+            raise ValueError("无效的 Content-Length")
+        if length > MAX_REQUEST_BODY:
+            raise PayloadTooLargeError("请求体过大")
+        raw = self.rfile.read(length)
+        payload = json.loads(raw.decode("utf-8")) if raw else {}
+        if not isinstance(payload, dict):
+            raise ValueError("请求体必须是 JSON 对象")
+        return payload
+
+    def _update_authorized(self) -> bool:
+        configured = configured_update_token()
+        authorization = self.headers.get("Authorization", "")
+        scheme, _, provided = authorization.partition(" ")
+        if configured:
+            return scheme.lower() == "bearer" and hmac.compare_digest(provided.strip(), configured)
+        # The service is bound to loopback for local development. A reverse
+        # proxy must provide a token before exposing this write operation.
+        return not (self.headers.get("X-Forwarded-For") or self.headers.get("X-Forwarded-Proto"))
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            self._send_json({"ok": STARTUP_ERROR is None, "error": STARTUP_ERROR})
+            healthy = STARTUP_ERROR is None
+            self._send_json({"ok": healthy, "error": STARTUP_ERROR}, 200 if healthy else 503)
             return
         if parsed.path == "/api/update-status":
             overview = MARKET.overview() if MARKET is not None else {"latest_date": "", "data_lag_days": None}
@@ -631,7 +678,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             params = parse_qs(parsed.query)
             group = params.get("group", ["all"])[0]
-            limit = int(params.get("limit", [100])[0])
+            try:
+                limit = int(params.get("limit", [100])[0])
+            except ValueError:
+                self._send_json({"ok": False, "error": "limit 必须是整数"}, 400)
+                return
             self._send_json({"ok": True, "items": MARKET.symbols(group, limit)})
             return
         if parsed.path == "/api/quotes":
@@ -648,9 +699,11 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path == "/api/update":
+            if not self._update_authorized():
+                self._send_json({"ok": False, "error": "需要 config.ini [credentials] update_token Bearer 令牌"}, 401)
+                return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                body = self._read_json_body()
                 start_date = body.get("start_date") or None
                 end_date = body.get("end_date") or None
                 for value in [start_date, end_date]:
@@ -659,6 +712,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if start_date and end_date and date.fromisoformat(start_date) > date.fromisoformat(end_date):
                     raise ValueError("开始日期不能晚于结束日期")
                 self._send_json({"ok": True, "job": start_update_job(start_date, end_date)}, 202)
+            except PayloadTooLargeError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, 413)
             except RuntimeError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, 409)
             except Exception as exc:
@@ -671,8 +726,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "error": STARTUP_ERROR}, 500)
             return
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            body = self._read_json_body()
             points = body.get("points", [])
             lookback = body.get("lookback", 40)
             group = body.get("group", "all")
@@ -685,6 +739,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 for result in payload["results"]:
                     result["candles"] = []
             self._send_json({"ok": True, **payload})
+        except PayloadTooLargeError as exc:
+            self._send_json({"ok": False, "error": str(exc)}, 413)
         except Exception as exc:
             self._send_json({"ok": False, "error": str(exc)}, 400)
 

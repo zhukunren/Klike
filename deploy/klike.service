@@ -1,0 +1,15 @@
+[Unit]
+Description=Klike market pattern service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/data/projects/Klike
+ExecStart=/data/projects/fast-backtest/.venv/bin/python /data/projects/Klike/server.py --host 127.0.0.1 --port 18765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

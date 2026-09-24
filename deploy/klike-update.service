@@ -1,0 +1,11 @@
+[Unit]
+Description=Update Klike market data
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/data/projects/Klike/data/stock_daily.parquet
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/data/projects/Klike
+ExecStart=/data/projects/fast-backtest/.venv/bin/python /data/projects/Klike/tools/refresh_market_data.py

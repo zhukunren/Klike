@@ -1,0 +1,6 @@
+[credentials]
+# TuShare API token.
+tushare_token =
+
+# Long random token required by the public update endpoint.
+update_token =

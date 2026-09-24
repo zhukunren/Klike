@@ -87,6 +87,8 @@
     scanPhase: "all",
     scanLoading: false,
     updatePollTimer: null,
+    searchDebounceTimer: null,
+    searchPending: false,
     updateStatus: "idle",
     market: "all",
     results: [],
@@ -590,6 +592,15 @@
     drawSketch();
   }
 
+  function scheduleSketchSearch() {
+    if (state.mode !== "draw" || state.points.length < 2) return;
+    window.clearTimeout(state.searchDebounceTimer);
+    state.searchDebounceTimer = window.setTimeout(() => {
+      state.searchDebounceTimer = null;
+      runSearch();
+    }, 180);
+  }
+
   function updateInputTabs() {
     const drawTab = $("#draw-tab");
     const uploadTab = $("#upload-tab");
@@ -746,6 +757,7 @@
       return;
     }
     if (sketchCanvas.hasPointerCapture(event.pointerId)) sketchCanvas.releasePointerCapture(event.pointerId);
+    scheduleSketchSearch();
   });
   sketchCanvas.addEventListener("pointercancel", (event) => {
     if (state.mode === "upload") state.uploadDrag = null;
@@ -985,7 +997,14 @@
   }
 
   async function runSearch() {
-    if (state.loading) return;
+    if (state.searchDebounceTimer) {
+      window.clearTimeout(state.searchDebounceTimer);
+      state.searchDebounceTimer = null;
+    }
+    if (state.loading) {
+      state.searchPending = true;
+      return;
+    }
     const queryPoints = sampleSketchPath(state.points);
     if (queryPoints.length < 2) {
       $("#match-count").textContent = "请先绘制至少两个点";
@@ -1011,6 +1030,10 @@
       state.selectedIndex = 0;
       setLoading(false);
       renderResults();
+      if (state.searchPending) {
+        state.searchPending = false;
+        window.setTimeout(runSearch, 0);
+      }
     }
   }
 
@@ -1090,7 +1113,24 @@
   function selectedResult() { return state.results[state.selectedIndex] || state.results[0] || null; }
 
   function renderInsight(result) {
-    if (!result) return;
+    if (!result) {
+      $("#selected-code").textContent = "—";
+      $("#selected-exchange").textContent = "—";
+      $("#selected-range").textContent = "—";
+      $("#score-value").textContent = "—";
+      $("#score-ring").style.setProperty("--score", 0);
+      $("#score-title").textContent = "等待扫描";
+      $("#score-subtitle").textContent = "选择一个结果查看结构特征";
+      $("#forward-label").textContent = "历史相似样本";
+      $("#forward-return").textContent = "—";
+      $("#forward-return").className = "";
+      $("#volume-ratio").textContent = "—";
+      $("#latest-price").textContent = "—";
+      $("#insight-callout p").textContent = "暂未找到匹配结果，请调整曲线或匹配窗口。";
+      $("#chart-footer-left").textContent = "—";
+      $("#chart-footer-right").textContent = "点击下方结果查看其它相似区间";
+      return;
+    }
     const isHistory = state.searchMode === "history";
     const stats = result.history_stats || {};
     $("#selected-code").textContent = codeLabel(result.code);
@@ -1128,7 +1168,12 @@
 
   function renderResults() {
     const list = $("#match-list");
-    if (!state.results.length) { list.innerHTML = '<div class="empty-card">暂未找到足够相似的形态，请调整曲线或匹配窗口。</div>'; return; }
+    if (!state.results.length) {
+      list.innerHTML = '<div class="empty-card">暂未找到足够相似的形态，请调整曲线或匹配窗口。</div>';
+      renderInsight(null);
+      drawMainChart(null);
+      return;
+    }
     list.innerHTML = state.results.slice(0, 12).map((result, index) => `
       <div class="match-card${index === state.selectedIndex ? " selected" : ""}" role="button" tabindex="0" data-index="${index}">
         <span class="rank">${String(index + 1).padStart(2, "0")}</span>
@@ -1225,9 +1270,12 @@
     if (dataUpdateRunButton.disabled) return;
     const startDate = $("#update-start-date").value;
     const endDate = $("#update-end-date").value;
+    const updateToken = $("#update-token").value.trim();
     dataUpdateRunButton.disabled = true;
     try {
-      const response = await fetch("/api/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start_date: startDate || null, end_date: endDate || null }) });
+      const headers = { "Content-Type": "application/json" };
+      if (updateToken) headers.Authorization = `Bearer ${updateToken}`;
+      const response = await fetch("/api/update", { method: "POST", headers, body: JSON.stringify({ start_date: startDate || null, end_date: endDate || null }) });
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload.error || "更新任务启动失败");
       renderUpdateStatus({ job: payload.job });

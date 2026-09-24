@@ -1,0 +1,11 @@
+[Unit]
+Description=Update Klike market data on trading weekdays
+
+[Timer]
+OnCalendar=Mon..Fri 18:30:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=10m
+Unit=klike-update.service
+
+[Install]
+WantedBy=timers.target

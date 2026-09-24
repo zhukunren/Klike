@@ -64,7 +64,7 @@
 
         <section class="data-update-panel" id="data-update-panel" hidden>
           <div class="data-update-head"><div><div class="panel-kicker">DATA PIPELINE</div><h2>更新本地行情</h2><p>通过交易日历逐日拉取全市场日线，更新完成后服务会自动重载。</p></div><button class="icon-button subtle" id="data-update-close" type="button" aria-label="关闭更新面板" title="关闭更新面板">×</button></div>
-          <div class="data-update-controls"><label>开始日期<input id="update-start-date" type="date" /></label><label>结束日期<input id="update-end-date" type="date" /></label><button class="primary-button compact-button" id="data-update-run" type="button"><span class="button-icon">↻</span><span>开始更新</span></button></div>
+          <div class="data-update-controls"><label>开始日期<input id="update-start-date" type="date" /></label><label>结束日期<input id="update-end-date" type="date" /></label><label>更新令牌<input id="update-token" type="password" autocomplete="off" placeholder="公网部署必填" /></label><button class="primary-button compact-button" id="data-update-run" type="button"><span class="button-icon">↻</span><span>开始更新</span></button></div>
           <div class="data-update-status" id="data-update-status"><span class="update-status-dot" id="update-status-dot"></span><strong id="update-status-text">准备就绪</strong><span id="update-status-detail">默认从本地最新日期开始</span></div>
           <pre class="data-update-log" id="data-update-log">等待更新任务…</pre>
         </section>
